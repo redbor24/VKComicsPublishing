@@ -134,6 +134,7 @@ def post_comics(comics, group_id):
                        f"{save_photo_resp['id']}",
     }
     resp = do_vk_method('wall.post', method_params)
+    post_url = f'https://vk.com/wall-{group_id}_{resp["response"]["post_id"]}'
     logger.info(f'wall.post: {json.dumps(resp, indent=4)}')
 
     # Постим комментарий автора комикса
@@ -145,6 +146,7 @@ def post_comics(comics, group_id):
         }
         resp = do_vk_method('wall.createComment', method_params)
         logger.info(f'wall.createComment: {json.dumps(resp, indent=4)}')
+    return post_url
 
 
 if __name__ == '__main__':
@@ -163,5 +165,6 @@ if __name__ == '__main__':
         exit()
 
     comics = get_random_comics()
-    post_comics(comics, group)
+    post_comics_link = post_comics(comics, group)
+    print(f'Ссылка на опубликованный комикс: {post_comics_link}')
     clear_comics(comics)
