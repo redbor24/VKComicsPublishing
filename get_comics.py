@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 import json
+from random import randint
 
 import requests
 
@@ -26,12 +27,21 @@ def get_file_ext_from_url(url):
     return Path(urlparse(url).path).name
 
 
+def get_max_comics_num():
+    resp = requests.get(f'https://xkcd.com/info.0.json')
+    resp.raise_for_status()
+    parsed = resp.json()
+    return parsed['num']
+
+
+def get_random_comics():
+    return get_comics(randint(1, get_max_comics_num()))
+
+
 def get_comics(comics_number):
     path_for_save = Path('files') / str(comics_number)
     os.makedirs(path_for_save, exist_ok=True)
-    resp = requests.get(
-        f'https://xkcd.com/{comics_number}/info.0.json',
-    )
+    resp = requests.get(f'https://xkcd.com/{comics_number}/info.0.json')
     resp.raise_for_status()
     parsed = resp.json()
 
@@ -39,6 +49,7 @@ def get_comics(comics_number):
     full_filename = Path.cwd() / Path(path_for_save) / get_file_ext_from_url(img_link)
     download_image(img_link, full_filename)
     return {
+        'num': parsed['num'],
         'full_filename': full_filename,
         'title': parsed['title'],
         'comment': parsed['alt'],
@@ -90,13 +101,11 @@ def post_file(full_filename, url):
 
 def post_comics(comics, group_id):
     upload_params = get_params_for_photos_upload(group_id)
-    print(f'upload_params: {json.dumps(upload_params, indent=4)}')
-    # return
+    # print(f'upload_params: {json.dumps(upload_params, indent=4)}')
     post_file_resp = post_file(comics['full_filename'], upload_params['upload_url'])
-    print(f'post_file_resp: {json.dumps(post_file_resp, indent=4)}')
+    # print(f'post_file_resp: {json.dumps(post_file_resp, indent=4)}')
 
     method_params = {
-        # 'user_id': upload_params['user_id'],
         'group_id': group_id,
         'photo': post_file_resp['photo'],
         'server': post_file_resp['server'],
@@ -104,42 +113,35 @@ def post_comics(comics, group_id):
         'caption': comics['title']
     }
 
-    # print(f'method_params: {method_params}')
     # Сохраняем картинку на стену
     save_photo_resp = do_vk_method('photos.saveWallPhoto', method_params)
     save_photo_resp = save_photo_resp['response'][0]
-    print('save_photo_resp:', json.dumps(save_photo_resp, indent=4))
+    # print('save_photo_resp:', json.dumps(save_photo_resp, indent=4))
 
-    # Публикуем комикс на стене
-    # method_params = {
-    #     'owner_id': group_id,
-    #     # 'owner_id': save_photo_resp['owner_id'],
-    #     'message': comics['title'],
-    #     'attachments': f"photo{save_photo_resp['owner_id']}_"
-    #                    f"{save_photo_resp['id']}",
-    #     # 'close_comments': '0',
-    # }
     method_params = {
-        'owner_id': group_id,
+        'owner_id': f'-{group_id}',
         'message': comics['title'],
         'attachments': f"photo{save_photo_resp['owner_id']}_"
                        f"{save_photo_resp['id']}",
     }
-    print(f'method_params: {method_params}')
+    # Размещаем комикс на стене группы
     resp = do_vk_method('wall.post', method_params)
-    print(f'resp: {resp}')
+    print('wall.post:', json.dumps(resp, indent=4))
+    # Постим комментарий автора
+    method_params = {
+        'post_id': resp['response']['post_id'],
+        'owner_id': f'-{group_id}',
+        'message': comics['comment'],
+    }
+    resp = do_vk_method('wall.createComment', method_params)
+    print('wall.createComment:', json.dumps(resp, indent=4))
     return resp['response']
 
 
 if __name__ == '__main__':
-    comics = get_comics(1)
-    # print(comics_params)
-    # exit()
-
-    group_id = get_group_id(get_vk_groups(), 'devmanVKComicsProject')
-    print(f'group_id: {group_id}')  # 210478891
-
-    post_comics_resp = post_comics(comics, group_id)
-    print(json.dumps(post_comics_resp, indent=4))
+    comics = get_random_comics()
+    group = get_group_id(get_vk_groups(), 'devmanVKComicsProject')
+    post_comics_resp = post_comics(comics, group)
+    # print(json.dumps(post_comics_resp, indent=4))
 
 
