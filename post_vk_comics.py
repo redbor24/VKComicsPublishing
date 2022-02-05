@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from config import VK_TOKEN, VK_GROUP
+from config import VK_TOKEN, VK_GROUP, ERROR_KEY, VKError
 
 logger = logging.getLogger()
 
@@ -70,7 +70,15 @@ def do_vk_method(method, params):
 
     resp = requests.get(f'https://api.vk.com/method/{method}', params=main_params)
     resp.raise_for_status()
-    return resp.json()
+    resp = resp.json()
+    if ERROR_KEY in resp:
+        raise VKError({
+            'error_code': resp['error']['error_code'],
+            'error_msg': resp['error']['error_msg'],
+            'method': method,
+            'params': params,
+        })
+    return resp
 
 
 def get_vk_groups():
@@ -94,7 +102,11 @@ def post_file(full_filename, url):
         response = requests.post(url, files=files)
         response.raise_for_status()
         parsed = response.json()
-        return None if not parsed['photo'] else parsed
+        if parsed['photo'] == '[]':
+            raise Exception('Ошибка загрузки файла.'
+                            ' Проверьте наименование метода и id группы,'
+                            ' в которую вы хотите разместить картинку')
+        return parsed
 
 
 def post_photo_to_wall(group_id, vk_photo, server, hash, caption):
@@ -182,8 +194,11 @@ if __name__ == '__main__':
         exit()
 
     try:
-        comics = get_random_comics()
-        post_comics_link = post_comics(comics, group)
-        print(f'Ссылка на опубликованный комикс: {post_comics_link}')
+        try:
+            comics = get_random_comics()
+            post_comics_link = post_comics(comics, group)
+            print(f'Ссылка на опубликованный комикс: {post_comics_link}')
+        except VKError as e:
+            print(f'Ошибка размещения комикса на стене группы: {e}')
     finally:
         os.remove(comics['full_filename'])
