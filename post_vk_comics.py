@@ -65,14 +65,14 @@ def clear_comics(comics):
     os.remove(comics['full_filename'])
 
 
-def do_vk_method(method, add_params):
-    params = {
+def do_vk_method(method, params):
+    main_params = {
         'access_token': VK_TOKEN,
         'v': '5.81',
     }
-    params = params | add_params
+    main_params = main_params | params
 
-    resp = requests.get(f'https://api.vk.com/method/{method}', params=params)
+    resp = requests.get(f'https://api.vk.com/method/{method}', params=main_params)
     resp.raise_for_status()
     return resp.json()
 
