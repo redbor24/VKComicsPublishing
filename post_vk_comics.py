@@ -48,9 +48,10 @@ def get_comics(comics_number):
     parsed = resp.json()
 
     img_link = parsed['img']
-    full_filename = Path.cwd() / \
-            Path(path_for_save) / \
-            get_file_ext_from_url(img_link)
+    full_file_path = Path.cwd() / Path(path_for_save)
+    file_ext = get_file_ext_from_url(img_link)
+    full_filename = full_file_path / file_ext
+
     download_image(img_link, full_filename)
     return {
         'num': parsed['num'],
