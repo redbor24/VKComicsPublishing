@@ -61,10 +61,6 @@ def get_comics(comics_number):
     }
 
 
-def clear_comics(comics):
-    os.remove(comics['full_filename'])
-
-
 def do_vk_method(method, params):
     main_params = {
         'access_token': VK_TOKEN,
@@ -85,13 +81,6 @@ def get_group_id(groups, group_name):
     for group in groups['response']['items']:
         if group['name'] == group_name:
             return group['id']
-    return None
-
-
-def get_address_for_photos_upload(group_id):
-    resp = do_vk_method('photos.getWallUploadServer', {'group_id': group_id})
-    logger.info(f'get_address_for_photos_upload: {json.dumps(resp, indent=4)}')
-    return resp['response']['upload_url']
 
 
 def get_params_for_photos_upload(group_id):
@@ -108,6 +97,44 @@ def post_file(full_filename, url):
         return None if not parsed['photo'] else parsed
 
 
+def post_photo_to_wall(group_id, vk_photo, server, hash, caption):
+    # Сохраняем картинку на стену
+    method_params = {
+        'group_id': group_id,
+        'photo': vk_photo,
+        'server': server,
+        'hash': hash,
+        'caption': caption
+    }
+    save_photo_resp = do_vk_method('photos.saveWallPhoto', method_params)
+    save_photo_resp = save_photo_resp['response'][0]
+    logger.info(f'save_photo_resp: {json.dumps(save_photo_resp, indent=4)}')
+    return save_photo_resp
+
+
+def post_comics_to_wall(group_id, message, owner_id, vk_photo_id):
+    method_params = {
+        'owner_id': f'-{group_id}',
+        'message': message,
+        'attachments': f'photo{owner_id}_{vk_photo_id}',
+    }
+    wall_post_resp = do_vk_method('wall.post', method_params)
+    post_url = f'https://vk.com/wall-{group_id}_' \
+               f'{wall_post_resp["response"]["post_id"]}'
+    logger.info(f'wall.post: {json.dumps(wall_post_resp, indent=4)}')
+    return wall_post_resp["response"]["post_id"], post_url
+
+
+def post_comment(post_id, owner_id, comment):
+    method_params = {
+        'post_id': post_id,
+        'owner_id': owner_id,
+        'message': comment,
+    }
+    _ = do_vk_method('wall.createComment', method_params)
+    logger.info(f'wall.createComment: {json.dumps(_, indent=4)}')
+
+
 def post_comics(comics, group_id):
     upload_params = get_params_for_photos_upload(group_id)
     logger.info(f'upload_params: {json.dumps(upload_params, indent=4)}')
@@ -116,37 +143,26 @@ def post_comics(comics, group_id):
     logger.info(f'post_file_resp: {json.dumps(post_file_resp, indent=4)}')
 
     # Сохраняем картинку на стену
-    method_params = {
-        'group_id': group_id,
-        'photo': post_file_resp['photo'],
-        'server': post_file_resp['server'],
-        'hash': post_file_resp['hash'],
-        'caption': comics['title']
-    }
-    save_photo_resp = do_vk_method('photos.saveWallPhoto', method_params)
-    save_photo_resp = save_photo_resp['response'][0]
-    logger.info(f'save_photo_resp: {json.dumps(save_photo_resp, indent=4)}')
+    save_photo_resp = post_photo_to_wall(
+        group_id,
+        post_file_resp['photo'],
+        post_file_resp['server'],
+        post_file_resp['hash'],
+        comics['title']
+    )
 
     # Размещаем комикс на стене группы
-    method_params = {
-        'owner_id': f'-{group_id}',
-        'message': comics['title'],
-        'attachments': f"photo{save_photo_resp['owner_id']}_"
-                       f"{save_photo_resp['id']}",
-    }
-    resp = do_vk_method('wall.post', method_params)
-    post_url = f'https://vk.com/wall-{group_id}_{resp["response"]["post_id"]}'
-    logger.info(f'wall.post: {json.dumps(resp, indent=4)}')
+    post_id, post_url = post_comics_to_wall(
+        group_id,
+        comics['title'],
+        save_photo_resp['owner_id'],
+        save_photo_resp['id']
+    )
 
     # Постим комментарий автора комикса
     if comics['comment']:
-        method_params = {
-            'post_id': resp['response']['post_id'],
-            'owner_id': f'-{group_id}',
-            'message': comics['comment'],
-        }
-        resp = do_vk_method('wall.createComment', method_params)
-        logger.info(f'wall.createComment: {json.dumps(resp, indent=4)}')
+        post_comment(post_id, f'-{group_id}', comics['comment'])
+
     return post_url
 
 
@@ -165,7 +181,9 @@ if __name__ == '__main__':
         print(err_msg)
         exit()
 
-    comics = get_random_comics()
-    post_comics_link = post_comics(comics, group)
-    print(f'Ссылка на опубликованный комикс: {post_comics_link}')
-    clear_comics(comics)
+    try:
+        comics = get_random_comics()
+        post_comics_link = post_comics(comics, group)
+        print(f'Ссылка на опубликованный комикс: {post_comics_link}')
+    finally:
+        os.remove(comics['full_filename'])
