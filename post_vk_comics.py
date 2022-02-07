@@ -18,11 +18,11 @@ def download_image(url, full_filename, params=None):
         'Accept-Language': 'ru-RU'
     }
 
-    response = requests.get(url, headers=headers, params=params)
-    response.raise_for_status()
+    resp = requests.get(url, headers=headers, params=params)
+    resp.raise_for_status()
 
     with open(full_filename, 'wb') as file:
-        file.write(response.content)
+        file.write(resp.content)
 
 
 def get_file_ext_from_url(url):
@@ -68,17 +68,18 @@ def do_vk_method(method, params):
     }
     main_params = main_params | params
 
-    resp = requests.get(f'https://api.vk.com/method/{method}', params=main_params)
+    resp = requests.get(f'https://api.vk.com/method/{method}',
+                        params=main_params)
     resp.raise_for_status()
-    resp = resp.json()
-    if ERROR_KEY in resp:
+    parsed = resp.json()
+    if ERROR_KEY in parsed:
         raise VKError({
-            'error_code': resp['error']['error_code'],
-            'error_msg': resp['error']['error_msg'],
+            'error_code': parsed['error']['error_code'],
+            'error_msg': parsed['error']['error_msg'],
             'method': method,
             'params': params,
         })
-    return resp
+    return parsed
 
 
 def get_vk_groups():
@@ -99,18 +100,18 @@ def get_params_for_photos_upload(group_id):
 def post_file(full_filename, url):
     with open(full_filename, 'rb') as file:
         files = {'photo': file}
-        response = requests.post(url, files=files)
-        response.raise_for_status()
-        parsed = response.json()
-        if parsed['photo'] == '[]':
-            raise Exception('Ошибка загрузки файла.'
-                            ' Проверьте наименование метода и id группы,'
-                            ' в которую вы хотите разместить картинку')
-        return parsed
+        resp = requests.post(url, files=files)
+
+    resp.raise_for_status()
+    parsed = resp.json()
+    if parsed['photo'] == '[]':
+        raise Exception('Ошибка загрузки файла.'
+                        ' Проверьте наименование метода и id группы,'
+                        ' в которую вы хотите разместить картинку')
+    return parsed
 
 
 def post_photo_to_wall(group_id, vk_photo, server, hash, caption):
-    # Сохраняем картинку на стену
     method_params = {
         'group_id': group_id,
         'photo': vk_photo,
@@ -154,7 +155,6 @@ def post_comics(comics, group_id):
                                upload_params['upload_url'])
     logger.info(f'post_file_resp: {json.dumps(post_file_resp, indent=4)}')
 
-    # Сохраняем картинку на стену
     save_photo_resp = post_photo_to_wall(
         group_id,
         post_file_resp['photo'],
@@ -163,7 +163,6 @@ def post_comics(comics, group_id):
         comics['title']
     )
 
-    # Размещаем комикс на стене группы
     post_id, post_url = post_comics_to_wall(
         group_id,
         comics['title'],
@@ -171,7 +170,6 @@ def post_comics(comics, group_id):
         save_photo_resp['id']
     )
 
-    # Постим комментарий автора комикса
     if comics['comment']:
         post_comment(post_id, f'-{group_id}', comics['comment'])
 
@@ -193,12 +191,12 @@ if __name__ == '__main__':
         print(err_msg)
         exit()
 
+    # try:
     try:
-        try:
-            comics = get_random_comics()
-            post_comics_link = post_comics(comics, group)
-            print(f'Ссылка на опубликованный комикс: {post_comics_link}')
-        except VKError as e:
-            print(f'Ошибка размещения комикса на стене группы: {e}')
+        comics = get_random_comics()
+        post_comics_link = post_comics(comics, group)
+        print(f'Ссылка на опубликованный комикс: {post_comics_link}')
+    except VKError as e:
+        print(f'Ошибка размещения комикса на стене группы: {e}')
     finally:
         os.remove(comics['full_filename'])
