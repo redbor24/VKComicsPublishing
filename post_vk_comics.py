@@ -191,7 +191,6 @@ if __name__ == '__main__':
         print(err_msg)
         exit()
 
-    # try:
     try:
         comics = get_random_comics()
         post_comics_link = post_comics(comics, group)
